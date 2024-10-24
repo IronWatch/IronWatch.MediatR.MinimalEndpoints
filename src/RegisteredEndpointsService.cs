@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace IronWatch.MediatR.MinimalEndpoints;
 
-public class RegisteredEndpoints
+public class RegisteredEndpointsService
 {
 	private readonly List<RegisteredEndpoint> registeredEndpoints = new();
 
@@ -16,7 +16,7 @@ public class RegisteredEndpoints
 	public RegisteredEndpoint? Get(Type type)
 	{
 		return registeredEndpoints
-			.Where(x => x.RequestType == type)
+			.Where(x => x.HandlerType == type)
 			.FirstOrDefault();
 	}
 
