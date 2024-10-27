@@ -16,6 +16,12 @@ public class AsFormAttribute : Attribute
         EnableAntiForgery = enableAntiForgery;
     }
 
+    public AsFormAttribute(string formPropertyName, bool enableAntiForgery = false)
+    {
+        FormPropertyName = formPropertyName;
+        EnableAntiForgery = enableAntiForgery;
+    }
+
     public AsFormAttribute(bool enableAntiForgery = false)
     {
         EnableAntiForgery = enableAntiForgery;

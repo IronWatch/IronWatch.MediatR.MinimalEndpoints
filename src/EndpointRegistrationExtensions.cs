@@ -61,6 +61,13 @@ public static class EndpointRegistrationExtensions
             throw new ApplicationException($"Could not find the method {nameof(RegisterEndpointWithFormChildProperty)}");
         }
 
+        MethodInfo? registerEndpointWithFormChildPropertyAndParamMethodInfo = typeof(EndpointRegistrationExtensions)
+                    .GetMethod(nameof(RegisterEndpointWithFormChildPropertyAndParam), BindingFlags.NonPublic | BindingFlags.Static);
+        if (registerEndpointWithFormChildPropertyAndParamMethodInfo is null)
+        {
+            throw new ApplicationException($"Could not find the method {nameof(RegisterEndpointWithFormChildPropertyAndParam)}");
+        }
+
         RegisteredEndpointsService? registeredEndpointsService = endpointRouteBuilder.ServiceProvider.GetService<RegisteredEndpointsService>();
 
 		Dictionary<Type, Type> responseModelsForRequests = new();
@@ -121,24 +128,24 @@ public static class EndpointRegistrationExtensions
 
             if (asFormAttribute is not null)
             {
-				if (asFormAttribute.FormPropertyName is null && asFormAttribute.ParamPropertyName is null)
-				{
+                if (asFormAttribute.FormPropertyName is null && asFormAttribute.ParamPropertyName is null)
+                {
                     _ = registerEndpointWithFormMethodInfo.MakeGenericMethod(registeredEndpoint.RequestType)
                     .Invoke(null,
                     [
                         endpointRouteBuilder,
                         registeredEndpoint,
-						asFormAttribute,
+                        asFormAttribute,
                         responseModelsForRequests.GetValueOrDefault(endpointType)
                     ]);
                 }
-				else if (asFormAttribute.FormPropertyName is not null && asFormAttribute.ParamPropertyName is not null)
-				{
-					PropertyInfo? formProperty = registeredEndpoint.RequestType.GetProperty(asFormAttribute.FormPropertyName);
-					if (formProperty is null)
-					{
-						throw new InvalidOperationException($"Could not find a property for form binding with name {asFormAttribute.FormPropertyName} on {registeredEndpoint.RequestType.FullName}");
-					}
+                else if (asFormAttribute.FormPropertyName is not null && asFormAttribute.ParamPropertyName is not null)
+                {
+                    PropertyInfo? formProperty = registeredEndpoint.RequestType.GetProperty(asFormAttribute.FormPropertyName);
+                    if (formProperty is null)
+                    {
+                        throw new InvalidOperationException($"Could not find a property for form binding with name {asFormAttribute.FormPropertyName} on {registeredEndpoint.RequestType.FullName}");
+                    }
 
                     PropertyInfo? paramProperty = registeredEndpoint.RequestType.GetProperty(asFormAttribute.ParamPropertyName);
                     if (paramProperty is null)
@@ -146,20 +153,38 @@ public static class EndpointRegistrationExtensions
                         throw new InvalidOperationException($"Could not find a property for param binding with name {asFormAttribute.ParamPropertyName} on {registeredEndpoint.RequestType.FullName}");
                     }
 
-                    _ = registerEndpointWithFormChildPropertyMethodInfo.MakeGenericMethod(registeredEndpoint.RequestType, formProperty.PropertyType, paramProperty.PropertyType)
+                    _ = registerEndpointWithFormChildPropertyAndParamMethodInfo.MakeGenericMethod(registeredEndpoint.RequestType, formProperty.PropertyType, paramProperty.PropertyType)
                     .Invoke(null,
                     [
                         endpointRouteBuilder,
                         registeredEndpoint,
                         asFormAttribute,
-						formProperty,
-						paramProperty,
+                        formProperty,
+                        paramProperty,
                         responseModelsForRequests.GetValueOrDefault(endpointType)
                     ]);
                 }
-				else
-				{
-					throw new InvalidOperationException($"{nameof(AsFormAttribute)} requires both {nameof(AsFormAttribute.FormPropertyName)} and {nameof(AsFormAttribute.ParamPropertyName)} to be set together!");
+                else if (asFormAttribute.FormPropertyName is not null && asFormAttribute.ParamPropertyName is null)
+                {
+                    PropertyInfo? formProperty = registeredEndpoint.RequestType.GetProperty(asFormAttribute.FormPropertyName);
+                    if (formProperty is null)
+                    {
+                        throw new InvalidOperationException($"Could not find a property for form binding with name {asFormAttribute.FormPropertyName} on {registeredEndpoint.RequestType.FullName}");
+                    }
+
+                    _ = registerEndpointWithFormChildPropertyMethodInfo.MakeGenericMethod(registeredEndpoint.RequestType, formProperty.PropertyType)
+                    .Invoke(null,
+                    [
+                        endpointRouteBuilder,
+                        registeredEndpoint,
+                        asFormAttribute,
+                        formProperty,
+                        responseModelsForRequests.GetValueOrDefault(endpointType)
+                    ]);
+                }
+                else
+                {
+					throw new InvalidOperationException($"{nameof(AsFormAttribute)} Unsupported use of param property only!");
 				}
             }
             else
@@ -209,7 +234,7 @@ public static class EndpointRegistrationExtensions
 		return result;
 	}
 
-	private static RouteHandlerBuilder RegisterEndpointWithFormChildProperty<TRequest, TForm, TParam>(
+	private static RouteHandlerBuilder RegisterEndpointWithFormChildPropertyAndParam<TRequest, TForm, TParam>(
 		IEndpointRouteBuilder endpointRouteBuilder,
 		RegisteredEndpoint registeredEndpoint,
 		AsFormAttribute asFormAttribute,
@@ -233,6 +258,38 @@ public static class EndpointRegistrationExtensions
 					TRequest request = Activator.CreateInstance<TRequest>();
                     formPropertyInfo.SetValue(request, formObject, null);
                     paramPropertyInfo.SetValue(request, paramObject, null);
+
+                    return await mediator.Send(request, cancellationToken);
+                });
+
+        if (!asFormAttribute.EnableAntiForgery)
+        {
+            routeHandlerBuilder = routeHandlerBuilder.DisableAntiforgery();
+        }
+
+        return routeHandlerBuilder.AttachMetadata(registeredEndpoint, responseModelType);
+    }
+
+    private static RouteHandlerBuilder RegisterEndpointWithFormChildProperty<TRequest, TForm>(
+        IEndpointRouteBuilder endpointRouteBuilder,
+        RegisteredEndpoint registeredEndpoint,
+        AsFormAttribute asFormAttribute,
+        PropertyInfo formPropertyInfo,
+        Type? responseModelType)
+        where TRequest : IRequest<IResult>
+        where TForm : class
+    {
+        RouteHandlerBuilder routeHandlerBuilder = endpointRouteBuilder.MapMethods(
+                registeredEndpoint.Route,
+                new List<string> { registeredEndpoint.Method },
+                async (
+                    CancellationToken cancellationToken,
+                    IMediator mediator,
+                    [FromForm] TForm formObject
+                ) =>
+                {
+                    TRequest request = Activator.CreateInstance<TRequest>();
+                    formPropertyInfo.SetValue(request, formObject, null);
 
                     return await mediator.Send(request, cancellationToken);
                 });
