@@ -16,7 +16,11 @@ builder.Services.AddMediatR(mediatr =>
 
 builder.Services.AddRegisteredEndpointTracker();
 
+builder.Services.AddAntiforgery();
+
 var app = builder.Build();
+
+app.UseAntiforgery();
 
 app.BuildEndpoints(Assembly.GetExecutingAssembly());
 

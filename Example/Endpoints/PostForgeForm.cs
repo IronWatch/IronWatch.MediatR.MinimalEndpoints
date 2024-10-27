@@ -16,7 +16,7 @@ public class PostForgeForm : IRequestHandler<PostForgeFormRequest, IResult>
     }
 }
 
-[AsForm(true)]
+[AsForm(enableAntiForgery: true)]
 public class PostForgeFormRequest : IRequest<IResult>
 {
     public required string Metal { get; set; }
