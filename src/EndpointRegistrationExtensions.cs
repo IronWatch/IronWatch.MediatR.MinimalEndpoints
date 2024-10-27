@@ -90,16 +90,15 @@ public static class EndpointRegistrationExtensions
                 throw new ApplicationException($"Endpoint class does not specify IResult as the TResponse generic type argument in IRequestHandler: {endpointType.Name}");
             }
 
-			List<Attribute> allAttributesOnEndpointClass = endpointType.GetCustomAttributes().ToList();
-
 			RegisteredEndpoint registeredEndpoint = new()
 			{
 				Method = endpointAttribute.Method,
 				Route = endpointAttribute.Route,
 				HandlerType = endpointType,
-				HandlerAttributes = allAttributesOnEndpointClass,
-				RequestType = genericArguments[0]
-			};
+				HandlerAttributes = endpointType.GetCustomAttributes().ToList(),
+				RequestType = genericArguments[0],
+				RequestAttributes = genericArguments[0].GetCustomAttributes().ToList()
+            };
 
 			_ = registerEndpointMethodInfo.MakeGenericMethod(registeredEndpoint.RequestType)
 				.Invoke(null,
@@ -148,21 +147,49 @@ public static class EndpointRegistrationExtensions
 	private static RouteHandlerBuilder RegisterEndpoint<TRequest>(
 		IEndpointRouteBuilder endpointRouteBuilder,
 		RegisteredEndpoint registeredEndpoint,
-		Type? responseModelType) where TRequest : IRequest<IResult>
+		Type? responseModelType)
+		where TRequest : IRequest<IResult>
 	{
 		RouteHandlerBuilder? routeHandlerBuilder = null;
 
-        routeHandlerBuilder = endpointRouteBuilder.MapMethods(
-            registeredEndpoint.Route,
-            new List<string> { registeredEndpoint.Method },
-            async (
-                CancellationToken cancellationToken,
-                IMediator mediator,
-                [AsParameters] TRequest request
-            ) =>
-            {
-                return await mediator.Send(request, cancellationToken);
-            });
+		AsFormAttribute? asFormAttribute = registeredEndpoint.RequestAttributes
+			.Where(x => typeof(AsFormAttribute).IsAssignableFrom(x.GetType()))
+			.Cast<AsFormAttribute>()
+			.FirstOrDefault();
+
+		if (asFormAttribute is not null)
+		{
+			routeHandlerBuilder = endpointRouteBuilder.MapMethods(
+				registeredEndpoint.Route,
+				new List<string> { registeredEndpoint.Method },
+				async (
+					CancellationToken cancellationToken,
+					IMediator mediator,
+					[FromForm] TRequest request
+				) =>
+				{
+					return await mediator.Send(request, cancellationToken);
+				});
+
+			if (!asFormAttribute.EnableAntiForgery)
+			{
+                routeHandlerBuilder = routeHandlerBuilder.DisableAntiforgery();
+			}
+		}
+		else
+		{
+            routeHandlerBuilder = endpointRouteBuilder.MapMethods(
+                registeredEndpoint.Route,
+                new List<string> { registeredEndpoint.Method },
+                async (
+                    CancellationToken cancellationToken,
+                    IMediator mediator,
+                    [AsParameters] TRequest request
+                ) =>
+                {
+                    return await mediator.Send(request, cancellationToken);
+                });
+        }
 		
 		List<Attribute> metadataAttributes = registeredEndpoint.HandlerAttributes
 			.Where(x => typeof(IRouteMetadataAttribute).IsAssignableFrom(x.GetType()))

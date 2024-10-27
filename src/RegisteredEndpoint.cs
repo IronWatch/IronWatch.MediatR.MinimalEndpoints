@@ -10,4 +10,5 @@ public class RegisteredEndpoint
     public required Type HandlerType { get; set; }
     public required List<Attribute> HandlerAttributes { get; set; }
     public required Type RequestType { get; set; }
+    public required List<Attribute> RequestAttributes { get; set; }
 }
